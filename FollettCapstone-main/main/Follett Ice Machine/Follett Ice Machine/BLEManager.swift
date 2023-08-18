@@ -1,8 +1,10 @@
-import Foundation
+import Foundation // Contains various supporting functions and data types
 
+// Contains the classes to be inherited from so that the bluetooth functionality can be customized/
 import CoreBluetooth
-import Charts
+import Charts // Contains base classes for making the charts and their animations
 
+// Used to group together the actual peripheral and their identifying values
 struct Peripheral: Identifiable {
     let id: Int
     let name: String
@@ -10,6 +12,7 @@ struct Peripheral: Identifiable {
     let cbPerpheral: CBPeripheral!
 }
 
+// Used to group together the different representations of the parameter (as ordered number, byte length, its bytes, and its integer and string values
 struct Parameter: Identifiable {
     public var id: Int
     var paramByteLength: Int8 // Number of bytes that each parameter takes up
@@ -42,10 +45,13 @@ struct CBUUIDs{
     
 }
 
+// Inherits from NSObject to give the class certain runtime characteristics and objective-c qualities
+// Inherits from ObservableObject so that any changes made in other files are immediately reflected on the instance of the class
+// Inherits from CBCentralManagerDelegate and CBPeripheralDelegate to override functions that deal with bluetooth connections
 class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     
 
-
+    // Initialized array of parameters taken from starbucks arduino code in order to save values
     @Published var params = [
     //    Parameter(paramByteLength: 1, paramName: "90", bytes: [], paramVal: 90, nonInt: []),
     //    Parameter(id: 1, paramByteLength: 1, paramName: "They afraid of the 6", bytes: [], paramVal: 6, nonInt: []),
@@ -87,7 +93,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     //  {1, "spRunOnSb", {}, -1, ""}, {2, "spStartupDly", {}, -1, ""}, {1, "icePerRes", {}, -1, ""}, {1, "DlyWUsageSb", {}, -1, ""}, {4, "PhDModel", {}, -1, ""},
     ]
     
-    enum modes: Int {
+    enum modes: Int { // List of modes for use later
         case standby
         case waterfill
         case makingice
@@ -102,7 +108,9 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     }
     
 
-    var myCentral: CBCentralManager!
+    var myCentral: CBCentralManager! // Variable that stores the actual manager for the data rx tx
+    
+    // Variable that stores the peripheral to be connected to: "Follett Ice Machine"
     var myPeripheral: CBPeripheral!
     
     // init all the tx and rx vairables for all the characteristics
@@ -142,14 +150,14 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     private var augerCurMax_tx: CBCharacteristic!
     private var augerCurMax_rx: CBCharacteristic!
 
-    @Published var isSwitchedOn = false
-    @Published var peripherals = [Peripheral]()
-    var gettingMode = false
-    @Published var modeCount = 0
+    @Published var isSwitchedOn = false // Bool to know if Follett Ice Machine is on
+    @Published var peripherals = [Peripheral]() // List of all the bluetooth peripheral found
+    var gettingMode = false // Bool to know if the 24 hour mode data is incoming
+    @Published var modeCount = 0 // Counting the number of values in the 24 hour mode data
     
-    @Published var send = false
+    @Published var send = false // Bool to know if a written value should be sent
     
-    // arraies for data tables
+    // arrays for data tables
     @Published var maxAmpData: [[Double]] = []
     @Published var minAmpData: [[Double]] = []
     @Published var modeData: [[Double]] = []
@@ -158,16 +166,16 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     @Published var led1Data: [[Double]] = []
     @Published var led2Data: [[Double]] = []
     
-    // arraies for graphes
+    // arrays for graphs
     @Published var minEntries: [ChartDataEntry] = []
     @Published var maxEntries: [ChartDataEntry] = []
     @Published var modeEntries: [ChartDataEntry] = []
     @Published var errorEntries: [BarChartDataEntry] = []
     
-    @Published var mode24DataPercentage: [PieChartDataEntry] = [PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0)]
-    @Published var mode24Data: [Double] = []
+    @Published var mode24DataPercentage: [PieChartDataEntry] = [PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0), PieChartDataEntry(value: 0)] // Percentages of time spent in each mode
+    @Published var mode24Data: [Double] = [] // 24 hour mode data
     
-    @Published var WPResponses: [String] = Array(repeating: "", count: 82)
+    @Published var WPResponses: [String] = Array(repeating: "", count: 82) // var to store written values
 
     // led and dip switches
     var status = IceMachineStatus.shared
@@ -180,13 +188,13 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
     
 //    var counter = 0
 
-    override init() {
+    override init() { // Initialize the subclass and assign the delegator role to this instance
         super.init()
         myCentral = CBCentralManager(delegate: self, queue: nil)
         myCentral.delegate = self
     }
 
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+    func centralManagerDidUpdateState(_ central: CBCentralManager) { // On switch
         if central.state == .poweredOn {
             isSwitchedOn = true
         }
@@ -195,6 +203,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
     
+    // Attaining the peripherals and add them to the list; sort them by rssi
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
 
         var peripheralName: String!
@@ -229,6 +238,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         
     }
     
+    // Used just to connect to the selected peripheral
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         // to do, throw error when connect to nonesp32
         self.myPeripheral.discoverServices(nil)
@@ -247,6 +257,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 //        return isConnected
 //    }
     
+    // Another function that exposes any errors when connecting
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
 
         if ((error) != nil) {
@@ -265,6 +276,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         print("Discovered Services: \(services)")
     }
     
+    // A function that looks to get the characteristics from the service from the peripheral
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
            
         guard let characteristics = service.characteristics else {
@@ -281,7 +293,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 //        print("\(characteristics[6])")
         
         
-
+        // Setting the reading and writing characteristics to the characteristics found from the bluetooth service
         for characteristic in characteristics {
             print("SWV: ", characteristic.uuid.uuidString == CBUUIDs.swv_UUID)
             if (characteristic.uuid.uuidString == CBUUIDs.mode_UUID) {
@@ -348,6 +360,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
         }
     }
     
+    // Handling for what to do with the values read from the bluetooth service
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         
         
@@ -362,16 +375,19 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
 //        print("\(characteristic.uuid)")
 //        print("\(characteristicValue)")
         
-        if (characteristic.uuid.uuidString == CBUUIDs.mode_UUID){
+        if (characteristic.uuid.uuidString == CBUUIDs.mode_UUID){ // Mode data
             gettingMode = false
 //            for i in stride(from: 0, through: characteristicValue.count - 1, by: 2) {
-                let time = Date().timeIntervalSince1970
-            if (characteristicValue.description != "0 bytes") {
+            let time = Date().timeIntervalSince1970 // Need to get a time for each value
+            if (characteristicValue.description != "0 bytes") { // Make sure there's data
                 let mode = Double(characteristicValue[1])
                 //              counter = Int(characteristicValue[i])
+                
+                // Add to the data storage
                 self.modeEntries.append(ChartDataEntry(x: Double(time), y: Double(mode), data: "Mode data"))
                 self.modeData.append([Double(time), Double(mode)])
                 
+                // Cut off the data in the graph to only previous 50 values
                 if (self.modeData.count > 80){
                     self.modeData = self.modeData.suffix(50)
                 }
@@ -381,7 +397,7 @@ class BLEManager: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeriph
                 
                 //            }
             }
-        } else if (characteristic.uuid.uuidString == CBUUIDs.mode24_UUID){
+        } else if (characteristic.uuid.uuidString == CBUUIDs.mode24_UUID){ // 24 hour mode data
             gettingMode = true
 
             if (characteristicValue.description != "0 bytes") {
